@@ -59,7 +59,7 @@ struct AssignmentView: View {
                         Text(breakdown.participant.name)
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        Text(breakdown.total.currency(code: receipt.currencyCode ?? "USD"))
+                        Text(breakdown.total.currency(code: receipt.effectiveCurrencyCode))
                             .font(.headline.monospacedDigit())
                     }
                 }

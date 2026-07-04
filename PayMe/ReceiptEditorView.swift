@@ -9,6 +9,10 @@ struct ReceiptEditorView: View {
     @State private var recoveredLineIDs: Set<UUID> = []
     @State private var editingItem: ReceiptItem?
 
+    private var currencyCode: String {
+        receipt.effectiveCurrencyCode
+    }
+
     private var visibleExcludedLines: [ExcludedReceiptLine] {
         excludedLines.filter { !recoveredLineIDs.contains($0.id) }
     }
@@ -34,7 +38,7 @@ struct ReceiptEditorView: View {
             } header: {
                 Text("Items")
             } footer: {
-                Text("Subtotal \(receipt.itemSubtotal.currency(code: receipt.currencyCode ?? "USD"))")
+                Text("Subtotal \(receipt.itemSubtotal.currency(code: currencyCode))")
             }
 
             if receipt.discount > 0 {
@@ -56,7 +60,7 @@ struct ReceiptEditorView: View {
                         Text("After discount")
                         Spacer()
                         Text(max(0, receipt.itemSubtotal - receipt.discount)
-                            .currency(code: receipt.currencyCode ?? "USD"))
+                            .currency(code: currencyCode))
                             .fontWeight(.semibold)
                     }
                     Button("Remove discount", role: .destructive) {
@@ -77,7 +81,7 @@ struct ReceiptEditorView: View {
                                     .lineLimit(2)
                                 Spacer()
                                 if let amount = line.amount {
-                                    Text(amount.currency(code: receipt.currencyCode ?? "USD"))
+                                    Text(amount.currency(code: currencyCode))
                                         .foregroundStyle(.secondary)
                                 }
                             }
@@ -121,14 +125,14 @@ struct ReceiptEditorView: View {
                     HStack {
                         Text(receipt.discountLabel.isEmpty ? "Discount" : receipt.discountLabel)
                         Spacer()
-                        Text((-receipt.discount).currency(code: receipt.currencyCode ?? "USD"))
+                        Text((-receipt.discount).currency(code: currencyCode))
                             .foregroundStyle(.green)
                     }
                 }
                 HStack {
                     Text("Total").fontWeight(.semibold)
                     Spacer()
-                    Text(receipt.grandTotal.currency(code: receipt.currencyCode ?? "USD")).font(.title3.bold())
+                    Text(receipt.grandTotal.currency(code: currencyCode)).font(.title3.bold())
                 }
             }
 
@@ -170,13 +174,13 @@ struct ReceiptEditorView: View {
                     Text(item.name)
                         .font(.headline)
                     if item.quantity > 1 {
-                        Text("\(item.quantity) × \(item.unitPrice.currency(code: receipt.currencyCode ?? "USD"))")
+                        Text("\(item.quantity) × \(item.unitPrice.currency(code: currencyCode))")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
-                Text(item.lineTotal.currency(code: receipt.currencyCode ?? "USD"))
+                Text(item.lineTotal.currency(code: currencyCode))
                     .font(.headline.monospacedDigit())
                 Button {
                     editingItem = item
@@ -190,45 +194,10 @@ struct ReceiptEditorView: View {
             }
 
             if receipt.billMode == .split {
-                assignmentPills(for: item)
+                AssignmentPills(item: item, participants: receipt.participants)
             }
         }
         .padding(.vertical, 6)
-    }
-
-    private func assignmentPills(for item: ReceiptItem) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                Button {
-                    withAnimation(.snappy) { item.assignedParticipantIDs = [] }
-                } label: {
-                    Text("All")
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(item.assignedParticipantIDs.isEmpty ? PayMeTheme.coral : Color(uiColor: .tertiarySystemFill))
-                        .foregroundStyle(item.assignedParticipantIDs.isEmpty ? .white : .primary)
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-
-                ForEach(receipt.participants) { person in
-                    let selected = !item.assignedParticipantIDs.isEmpty && item.assignedParticipantIDs.contains(person.id)
-                    Button {
-                        withAnimation(.snappy) { item.toggle(person, allParticipants: receipt.participants) }
-                    } label: {
-                        Text(person.name)
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(selected ? PayMeTheme.ink : Color(uiColor: .tertiarySystemFill))
-                        .foregroundStyle(selected ? .white : .primary)
-                        .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
     }
 
     private func restore(_ line: ExcludedReceiptLine) {

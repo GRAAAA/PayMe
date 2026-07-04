@@ -5,25 +5,17 @@ import PhotosUI
 struct SetupView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @State private var storeName = ""
-    @State private var billMode = BillMode.split
-    @State private var participantNames: [String] = []
-    @State private var newName = ""
+    @StateObject private var viewModel = SetupViewModel()
     @State private var showingScanner = false
-    @State private var isProcessing = false
-    @State private var parsed: ParsedReceipt?
-    @State private var errorMessage: String?
     @State private var createdReceipt: Receipt?
-    @State private var selectedPhoto: PhotosPickerItem?
     @AppStorage("payme.defaultCurrency") private var defaultCurrency = "MYR"
 
     var body: some View {
         NavigationStack {
             Form {
-                optionSection
                 scannerSection
-                peopleSection
-                billSection
+                reviewItemsSection
+                splitSection
                 errorSection
                 startSection
             }
@@ -46,7 +38,7 @@ struct SetupView: View {
                 ReceiptEditorView(
                     receipt: receipt,
                     isNewReceipt: true,
-                    excludedLines: []
+                    excludedLines: viewModel.editorExcludedLines
                 ) {
                     dismiss()
                 }
@@ -59,30 +51,22 @@ struct SetupView: View {
             Button {
                 showingScanner = true
             } label: {
-                receiptSourceRow(
-                    title: parsed == nil ? "Scan receipt" : "Scan again",
-                    subtitle: "Camera",
-                    systemImage: "viewfinder"
-                )
+                Label(viewModel.parsed == nil ? "Scan receipt" : "Scan again", systemImage: "viewfinder")
             }
-            .disabled(isProcessing)
+            .disabled(viewModel.isProcessing)
 
-            PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                receiptSourceRow(
-                    title: "Choose photo",
-                    subtitle: "Photos",
-                    systemImage: "photo.on.rectangle"
-                )
+            PhotosPicker(selection: $viewModel.selectedPhoto, matching: .images) {
+                Label("Choose photo", systemImage: "photo.on.rectangle")
             }
-            .disabled(isProcessing)
-            .onChange(of: selectedPhoto) { _, newPhoto in
+            .disabled(viewModel.isProcessing)
+            .onChange(of: viewModel.selectedPhoto) { _, newPhoto in
                 guard let newPhoto else { return }
-                process(newPhoto)
+                Task { await viewModel.process(photo: newPhoto) }
             }
 
-            if isProcessing || parsed != nil {
+            if viewModel.isProcessing || viewModel.parsed != nil {
                 HStack {
-                    Text(scanStatus)
+                    Text(viewModel.scanStatus)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -94,94 +78,125 @@ struct SetupView: View {
         }
     }
 
-    private func receiptSourceRow(title: String, subtitle: String, systemImage: String) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: systemImage)
-                .font(.title2)
-                .frame(width: 42, height: 42)
-                .foregroundStyle(.white)
-                .background(PayMeTheme.coral)
-                .clipShape(Circle())
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.headline)
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Image(systemName: "chevron.right")
-                .foregroundStyle(.secondary)
+    @ViewBuilder
+    private var scanAccessory: some View {
+        if viewModel.isProcessing {
+            ProgressView()
+        } else {
+            Image(systemName: viewModel.parsed == nil ? "chevron.right" : "checkmark.circle.fill")
+                .foregroundStyle(viewModel.parsed == nil ? Color.secondary : Color.green)
         }
     }
 
-    private var scanStatus: String {
-        guard let parsed else { return "Ready to scan" }
-        let itemLabel = parsed.items.count == 1 ? "item" : "items"
-        if ReceiptConfidenceLevel(confidence: parsed.confidence) == .accepted {
-            return "\(parsed.items.count) \(itemLabel) found"
-        }
-        return "\(parsed.items.count) \(itemLabel) found · check once"
+    private var scanCurrencyCode: String {
+        viewModel.scanCurrencyCode(defaultCurrency: defaultCurrency)
     }
 
     @ViewBuilder
-    private var scanAccessory: some View {
-        if isProcessing {
-            ProgressView()
-        } else {
-            Image(systemName: parsed == nil ? "chevron.right" : "checkmark.circle.fill")
-                .foregroundStyle(parsed == nil ? Color.secondary : Color.green)
+    private var reviewItemsSection: some View {
+        if !viewModel.reviewItemsAreEmpty {
+            Section {
+                if viewModel.automaticParsedItems.count > 0 {
+                    HStack {
+                        Label("\(viewModel.automaticParsedItems.count) added", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(viewModel.automaticSubtotal.currency(code: scanCurrencyCode))
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.caption)
+                }
+
+                ForEach(viewModel.reviewParsedItems) { item in
+                    Button {
+                        viewModel.toggleReviewItem(item)
+                    } label: {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(item.name)
+                                    .foregroundStyle(.primary)
+                                if item.quantity > 1 {
+                                    Text("\(item.quantity) × \(item.price.currency(code: scanCurrencyCode))")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                            Text((item.price * Decimal(item.quantity)).currency(code: scanCurrencyCode))
+                                .foregroundStyle(.secondary)
+                            Image(systemName: viewModel.selectedReviewItemIDs.contains(item.id) ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(viewModel.selectedReviewItemIDs.contains(item.id) ? PayMeTheme.coral : .secondary)
+                        }
+                    }
+                }
+                ForEach(viewModel.reviewExcludedLines) { line in
+                    Button {
+                        viewModel.toggleReviewLine(line)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Text(line.suggestedName)
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            if let amount = line.amount {
+                                Text(amount.currency(code: scanCurrencyCode))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Image(systemName: viewModel.selectedReviewLineIDs.contains(line.id) ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(viewModel.selectedReviewLineIDs.contains(line.id) ? PayMeTheme.coral : .secondary)
+                        }
+                    }
+                }
+            } header: {
+                HStack {
+                    Text("Check found items")
+                    Spacer()
+                    Button(viewModel.reviewSelectionButtonTitle) {
+                        viewModel.toggleAllReviewItems()
+                    }
+                    .font(.caption.weight(.semibold))
+                    .textCase(nil)
+                }
+            } footer: {
+                Text("\(viewModel.readyItemCount) ready · \(viewModel.readySubtotal.currency(code: scanCurrencyCode))")
+            }
         }
     }
 
-    private var billSection: some View {
+    private var splitSection: some View {
         Section {
-            TextField("Place name", text: $storeName)
-        } header: {
-            Text("Details")
-        }
-    }
-
-    private var optionSection: some View {
-        Section {
-            Picker("Bill mode", selection: $billMode) {
+            Picker("Bill mode", selection: $viewModel.billMode) {
                 ForEach(BillMode.allCases) { mode in
                     Text(mode.rawValue).tag(mode)
                 }
             }
             .pickerStyle(.segmented)
-        }
-    }
 
-    @ViewBuilder
-    private var peopleSection: some View {
-        if billMode == .split {
-            Section {
-                ForEach(participantNames, id: \.self) { name in
+            TextField("Place name", text: $viewModel.storeName)
+
+            if viewModel.billMode == .split {
+                ForEach(viewModel.participantNames, id: \.self) { name in
                     Text(name)
                 }
-                .onDelete { participantNames.remove(atOffsets: $0) }
+                .onDelete { viewModel.participantNames.remove(atOffsets: $0) }
 
                 HStack {
-                    TextField("Add person", text: $newName)
+                    TextField("Add person", text: $viewModel.newName)
                         .textInputAutocapitalization(.words)
-                        .onSubmit(addName)
-                    Button(action: addName) {
+                        .onSubmit(viewModel.addName)
+                    Button(action: viewModel.addName) {
                         Image(systemName: "plus.circle.fill")
                     }
-                    .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(viewModel.newName.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
-            } header: {
-                Text("People")
             }
-        } else {
-            EmptyView()
+        } header: {
+            Text("Split")
         }
     }
 
     @ViewBuilder
     private var errorSection: some View {
-        if let errorMessage {
+        if let errorMessage = viewModel.errorMessage {
             Section("Check scan") {
                 Text(errorMessage)
                     .font(.caption)
@@ -192,120 +207,23 @@ struct SetupView: View {
 
     private var startSection: some View {
         Section {
-            Button(primaryButtonTitle) { createReceipt() }
+            Button(viewModel.primaryButtonTitle) { createReceipt() }
                 .frame(maxWidth: .infinity)
                 .fontWeight(.semibold)
-                .disabled(billMode == .split && participantNames.isEmpty)
+                .disabled(!viewModel.canContinue)
         }
-    }
-
-    private var primaryButtonTitle: String {
-        if parsed == nil {
-            return billMode == .split ? "Continue" : "Save receipt"
-        }
-        return billMode == .split ? "Review items" : "Review receipt"
-    }
-
-    private func addName() {
-        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !participantNames.contains(trimmed) else { return }
-        participantNames.append(trimmed)
-        newName = ""
     }
 
     private func process(_ images: [UIImage]) {
         showingScanner = false
-        isProcessing = true
-        errorMessage = nil
         Task {
-            do {
-                let result = try await ReceiptExtractionPipeline().parse(images: images)
-                await MainActor.run {
-                    apply(result)
-                    isProcessing = false
-                }
-            } catch {
-                await MainActor.run {
-                    errorMessage = "We couldn’t read that receipt. You can retry or enter the items manually."
-                    isProcessing = false
-                }
-            }
+            await viewModel.process(images: images)
         }
-    }
-
-    private func process(_ photo: PhotosPickerItem) {
-        isProcessing = true
-        errorMessage = nil
-        Task {
-            do {
-                guard
-                    let data = try await photo.loadTransferable(type: Data.self),
-                    let image = UIImage(data: data)
-                else {
-                    throw PhotoImportError.invalidImage
-                }
-                let result = try await ReceiptExtractionPipeline().parse(images: [image])
-                await MainActor.run {
-                    apply(result)
-                    selectedPhoto = nil
-                    isProcessing = false
-                }
-            } catch {
-                await MainActor.run {
-                    errorMessage = "We couldn’t read that image. Try a clearer receipt photo or enter the items manually."
-                    selectedPhoto = nil
-                    isProcessing = false
-                }
-            }
-        }
-    }
-
-    private func apply(_ receipt: ParsedReceipt) {
-        parsed = receipt
-        if storeName.isEmpty { storeName = receipt.storeName }
-
-        var messages: [String] = []
-        let confidenceLevel = ReceiptConfidenceLevel(confidence: receipt.confidence)
-        if let confidenceMessage = confidenceLevel.message {
-            messages.append(confidenceMessage)
-        }
-        if receipt.items.isEmpty {
-            messages.append("No clear item rows were found. You can add items manually.")
-        } else if confidenceLevel == .poor {
-            messages.append("Please check the detected items.")
-        }
-        errorMessage = messages.isEmpty ? nil : Array(Set(messages)).sorted().joined(separator: "\n")
     }
 
     private func createReceipt() {
-        let receipt = Receipt(storeName: storeName.isEmpty ? "New receipt" : storeName)
-        receipt.currencyCode = defaultCurrency
-        receipt.billMode = billMode
-        if let parsedDate = parsed?.date {
-            receipt.date = parsedDate
-        }
-        receipt.participants = billMode == .split
-            ? participantNames.map(Participant.init)
-            : [Participant(name: "Me")]
-        if let parsed {
-            receipt.tax = parsed.tax
-            receipt.discount = parsed.discounts.reduce(0) { $0 + $1.amount }
-            let discountNames = parsed.discounts.map(\.name)
-            if !discountNames.isEmpty {
-                receipt.discountLabel = discountNames.count == 1
-                    ? discountNames[0]
-                    : "Discounts"
-            }
-            if !parsed.currencyCode.isEmpty {
-                receipt.currencyCode = parsed.currencyCode
-            }
-            receipt.items = parsed.items.map { ReceiptItem(name: $0.name, unitPrice: $0.price, quantity: $0.quantity) }
-        }
-        modelContext.insert(receipt)
+        let receipt = viewModel.makeReceipt(defaultCurrency: defaultCurrency)
+        ReceiptStorage.insert(receipt, in: modelContext)
         createdReceipt = receipt
     }
-}
-
-private enum PhotoImportError: Error {
-    case invalidImage
 }

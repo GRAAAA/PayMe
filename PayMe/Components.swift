@@ -25,12 +25,11 @@ struct ReceiptCard: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Text(receipt.grandTotal.currency(code: receipt.currencyCode ?? "USD")).fontWeight(.semibold)
+            Text(receipt.grandTotal.currency(code: receipt.effectiveCurrencyCode)).fontWeight(.semibold)
             Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
         }
         .padding(16)
-        .background(Color(uiColor: .secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .payMeCard(cornerRadius: 20)
     }
 }
 
@@ -39,59 +38,95 @@ struct ItemAssignmentCard: View {
     let participants: [Participant]
     let onEdit: () -> Void
 
+    private var currencyCode: String {
+        item.receipt?.effectiveCurrencyCode ?? Receipt.defaultCurrencyCode
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.name).font(.headline)
                     if item.quantity > 1 {
-                        Text("\(item.quantity) × \(item.unitPrice.currency(code: item.receipt?.currencyCode ?? "USD"))")
+                        Text("\(item.quantity) × \(item.unitPrice.currency(code: currencyCode))")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
-                Text(item.lineTotal.currency(code: item.receipt?.currencyCode ?? "USD")).font(.headline.monospacedDigit())
+                Text(item.lineTotal.currency(code: currencyCode)).font(.headline.monospacedDigit())
                 Button(action: onEdit) {
                     Image(systemName: "pencil").foregroundStyle(.secondary)
                 }
             }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    Button {
-                        withAnimation(.snappy) { item.assignedParticipantIDs = [] }
-                    } label: {
-                        Text("ALL")
-                            .font(.caption.bold())
-                            .frame(width: 42, height: 42)
-                            .background(item.assignedParticipantIDs.isEmpty ? PayMeTheme.coral : Color(uiColor: .tertiarySystemFill))
-                            .foregroundStyle(item.assignedParticipantIDs.isEmpty ? .white : .primary)
-                            .clipShape(Circle())
+            AssignmentPills(item: item, participants: participants, style: .initials)
+        }
+        .padding(16)
+        .payMeCard(cornerRadius: 20)
+    }
+}
+
+struct AssignmentPills: View {
+    enum Style: Equatable {
+        case initials
+        case names
+    }
+
+    @Bindable var item: ReceiptItem
+    let participants: [Participant]
+    var style: Style = .names
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                pill(
+                    title: style == .initials ? "ALL" : "All",
+                    selected: item.assignedParticipantIDs.isEmpty
+                ) {
+                    item.assignedParticipantIDs = []
+                }
+
+                ForEach(participants) { person in
+                    let selected = !item.assignedParticipantIDs.isEmpty &&
+                        item.assignedParticipantIDs.contains(person.id)
+                    pill(title: label(for: person), selected: selected) {
+                        item.toggle(person, allParticipants: participants)
                     }
-                    ForEach(participants) { person in
-                        let selected = !item.assignedParticipantIDs.isEmpty && item.assignedParticipantIDs.contains(person.id)
-                        Button {
-                            withAnimation(.snappy) { item.toggle(person, allParticipants: participants) }
-                        } label: {
-                            Text(person.initials)
-                                .font(.caption.bold())
-                                .frame(width: 42, height: 42)
-                                .background(selected ? PayMeTheme.ink : Color(uiColor: .tertiarySystemFill))
-                                .foregroundStyle(selected ? .white : .primary)
-                                .clipShape(Circle())
-                        }
-                        .accessibilityLabel(person.name)
-                    }
+                    .accessibilityLabel(person.name)
                 }
             }
         }
-        .padding(16)
-        .background(Color(uiColor: .secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    private func label(for participant: Participant) -> String {
+        style == .initials ? participant.initials : participant.name
+    }
+
+    private func pill(title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            withAnimation(.snappy) { action() }
+        } label: {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .frame(
+                    width: style == .initials ? 42 : nil,
+                    height: style == .initials ? 42 : nil
+                )
+                .padding(.horizontal, style == .initials ? 0 : 12)
+                .padding(.vertical, style == .initials ? 0 : 8)
+                .background(selected ? PayMeTheme.coral : PayMeTheme.subtleFill)
+                .foregroundStyle(selected ? .white : .primary)
+                .clipShape(style == .initials ? AnyShape(Circle()) : AnyShape(Capsule()))
+        }
+        .buttonStyle(.plain)
     }
 }
 
 struct BreakdownCard: View {
     let breakdown: PersonBreakdown
+
+    private var currencyCode: String {
+        breakdown.participant.receipt?.effectiveCurrencyCode ?? Receipt.defaultCurrencyCode
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -104,14 +139,14 @@ struct BreakdownCard: View {
                     .clipShape(Circle())
                 Text(breakdown.participant.name).font(.title3.bold())
                 Spacer()
-                Text(breakdown.total.currency(code: breakdown.participant.receipt?.currencyCode ?? "USD")).font(.title3.bold().monospacedDigit())
+                Text(breakdown.total.currency(code: currencyCode)).font(.title3.bold().monospacedDigit())
             }
             Divider()
             ForEach(breakdown.itemShares) { share in
                 HStack {
                     Text(share.peopleCount > 1 ? "1/\(share.peopleCount) \(share.item.name)" : share.item.name)
                     Spacer()
-                    Text(share.amount.currency(code: breakdown.participant.receipt?.currencyCode ?? "USD")).foregroundStyle(.secondary)
+                    Text(share.amount.currency(code: currencyCode)).foregroundStyle(.secondary)
                 }
                 .font(.subheadline)
             }
@@ -130,17 +165,28 @@ struct BreakdownCard: View {
             }
         }
         .padding(18)
-        .background(Color(uiColor: .secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .payMeCard(cornerRadius: 20)
     }
 
     private func line(_ label: String, amount: Decimal) -> some View {
         HStack {
             Text(label)
             Spacer()
-            Text(amount.currency(code: breakdown.participant.receipt?.currencyCode ?? "USD")).foregroundStyle(.secondary)
+            Text(amount.currency(code: currencyCode)).foregroundStyle(.secondary)
         }
         .font(.subheadline)
+    }
+}
+
+struct AnyShape: Shape {
+    private let path: (CGRect) -> Path
+
+    init<S: Shape>(_ shape: S) {
+        path = { rect in shape.path(in: rect) }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        path(rect)
     }
 }
 

@@ -19,7 +19,7 @@ struct SummaryView: View {
                         .foregroundStyle(.green)
                     Text(receipt.billMode == .onMe ? "On you" : "All squared up")
                         .font(.title.bold())
-                    Text("\(receipt.storeName) · \(receipt.grandTotal.currency(code: receipt.currencyCode ?? "USD"))")
+                    Text("\(receipt.storeName) · \(receipt.grandTotal.currency(code: receipt.effectiveCurrencyCode))")
                         .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 16)
@@ -38,8 +38,7 @@ struct SummaryView: View {
             titleVisibility: .visible
         ) {
             Button("Delete permanently", role: .destructive) {
-                modelContext.delete(receipt)
-                try? modelContext.save()
+                ReceiptStorage.delete(receipt, in: modelContext)
                 dismiss()
             }
             Button("Cancel", role: .cancel) {}
@@ -63,8 +62,7 @@ struct SummaryView: View {
                 if receipt.isArchived {
                     HStack(spacing: 12) {
                         Button {
-                            receipt.restore()
-                            try? modelContext.save()
+                            ReceiptStorage.restore(receipt, in: modelContext)
                             if let onFinished {
                                 onFinished()
                             } else {
@@ -86,8 +84,7 @@ struct SummaryView: View {
                     }
                 } else {
                     Button {
-                        receipt.archive()
-                        try? modelContext.save()
+                        ReceiptStorage.archive(receipt, in: modelContext)
                         if let onFinished {
                             onFinished()
                         } else {

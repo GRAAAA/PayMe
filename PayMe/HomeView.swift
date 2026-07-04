@@ -9,20 +9,19 @@ struct HomeView: View {
     }
 
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Receipt.date, order: .reverse) private var receipts: [Receipt]
+    @Query(
+        filter: #Predicate<Receipt> { $0.archivedAt == nil },
+        sort: \Receipt.date,
+        order: .reverse
+    ) private var activeReceipts: [Receipt]
+    @Query(
+        filter: #Predicate<Receipt> { $0.archivedAt != nil },
+        sort: \Receipt.archivedAt,
+        order: .reverse
+    ) private var archivedReceipts: [Receipt]
     @State private var showingSetup = false
     @State private var showingSettings = false
     @State private var selectedList = ReceiptList.active
-
-    private var activeReceipts: [Receipt] {
-        receipts.filter { !$0.isArchived }
-    }
-
-    private var archivedReceipts: [Receipt] {
-        receipts
-            .filter(\.isArchived)
-            .sorted { ($0.archivedAt ?? .distantPast) > ($1.archivedAt ?? .distantPast) }
-    }
 
     private var displayedReceipts: [Receipt] {
         selectedList == .active ? activeReceipts : archivedReceipts
@@ -32,7 +31,7 @@ struct HomeView: View {
         NavigationStack {
             ZStack {
                 PayMeTheme.canvas.ignoresSafeArea()
-                if receipts.isEmpty {
+                if activeReceipts.isEmpty && archivedReceipts.isEmpty {
                     ContentUnavailableView {
                         Label("No splits yet", systemImage: "receipt")
                     } description: {
@@ -94,18 +93,15 @@ struct HomeView: View {
                                 .contextMenu {
                                     if receipt.isArchived {
                                         Button("Restore", systemImage: "arrow.uturn.backward") {
-                                            receipt.restore()
-                                            try? modelContext.save()
+                                            ReceiptStorage.restore(receipt, in: modelContext)
                                         }
                                     } else {
                                         Button("Archive", systemImage: "archivebox") {
-                                            receipt.archive()
-                                            try? modelContext.save()
+                                            ReceiptStorage.archive(receipt, in: modelContext)
                                         }
                                     }
                                     Button("Delete", systemImage: "trash", role: .destructive) {
-                                        modelContext.delete(receipt)
-                                        try? modelContext.save()
+                                        ReceiptStorage.delete(receipt, in: modelContext)
                                     }
                                 }
                             }
@@ -117,6 +113,13 @@ struct HomeView: View {
             .navigationTitle("PayMe")
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
+                    NavigationLink {
+                        AnalysisView()
+                    } label: {
+                        Image(systemName: "chart.bar.xaxis")
+                    }
+                    .accessibilityLabel("Analysis")
+
                     Button { showingSettings = true } label: {
                         Image(systemName: "gearshape")
                     }

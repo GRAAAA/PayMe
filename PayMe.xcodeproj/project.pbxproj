@@ -31,6 +31,11 @@
 				A10000000000000000000011,
 				A10000000000000000000013,
 				A10000000000000000000014,
+				A10000000000000000000015,
+				A10000000000000000000016,
+				A10000000000000000000017,
+				A10000000000000000000018,
+				A10000000000000000000019,
 				A1000000000000000000000D,
 				A1000000000000000000000E,
 				A1000000000000000000000F,
@@ -63,6 +68,11 @@
 		A10000000000000000000011 = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>";};
 		A10000000000000000000013 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptExtractionPipeline.swift; sourceTree = "<group>";};
 		A10000000000000000000014 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiReceiptExtractor.swift; sourceTree = "<group>";};
+		A10000000000000000000015 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisView.swift; sourceTree = "<group>";};
+		A10000000000000000000016 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupViewModel.swift; sourceTree = "<group>";};
+		A10000000000000000000017 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptBuilder.swift; sourceTree = "<group>";};
+		A10000000000000000000018 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpendingAnalysis.swift; sourceTree = "<group>";};
+		A10000000000000000000019 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisViewModel.swift; sourceTree = "<group>";};
 		A20000000000000000000001 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PayMe.app; sourceTree = BUILT_PRODUCTS_DIR;};
 		A30000000000000000000001 = {
 			isa = PBXNativeTarget;
@@ -98,6 +108,11 @@
 				A50000000000000000000010,
 				A50000000000000000000013,
 				A50000000000000000000014,
+				A50000000000000000000015,
+				A50000000000000000000016,
+				A50000000000000000000017,
+				A50000000000000000000018,
+				A50000000000000000000019,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -120,6 +135,11 @@
 		A50000000000000000000011 = {isa = PBXBuildFile; fileRef = A10000000000000000000011;};
 		A50000000000000000000013 = {isa = PBXBuildFile; fileRef = A10000000000000000000013;};
 		A50000000000000000000014 = {isa = PBXBuildFile; fileRef = A10000000000000000000014;};
+		A50000000000000000000015 = {isa = PBXBuildFile; fileRef = A10000000000000000000015;};
+		A50000000000000000000016 = {isa = PBXBuildFile; fileRef = A10000000000000000000016;};
+		A50000000000000000000017 = {isa = PBXBuildFile; fileRef = A10000000000000000000017;};
+		A50000000000000000000018 = {isa = PBXBuildFile; fileRef = A10000000000000000000018;};
+		A50000000000000000000019 = {isa = PBXBuildFile; fileRef = A10000000000000000000019;};
 		A60000000000000000000001 = {
 			isa = PBXProject;
 			attributes = {

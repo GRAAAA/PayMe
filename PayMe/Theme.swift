@@ -6,6 +6,15 @@ enum PayMeTheme {
     static let ink = Color(red: 0.10, green: 0.10, blue: 0.12)
     static let muted = Color(red: 0.46, green: 0.45, blue: 0.49)
     static let canvas = Color(uiColor: .systemGroupedBackground)
+    static let card = Color(uiColor: .secondarySystemGroupedBackground)
+    static let subtleFill = Color(uiColor: .tertiarySystemFill)
+}
+
+extension View {
+    func payMeCard(cornerRadius: CGFloat = 14) -> some View {
+        background(PayMeTheme.card)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
 }
 
 struct PrimaryButtonStyle: ButtonStyle {

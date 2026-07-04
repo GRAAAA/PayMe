@@ -40,7 +40,7 @@ final class Receipt {
         self.tip = tip
         discount = 0
         discountLabel = "Discount"
-        self.currencyCode = Locale.current.currency?.identifier ?? "USD"
+        self.currencyCode = Self.defaultCurrencyCode
         billModeRaw = BillMode.split.rawValue
         extraSplitModeRaw = ExtraSplitMode.proportional.rawValue
         discountSplitModeRaw = ExtraSplitMode.proportional.rawValue
@@ -61,6 +61,17 @@ final class Receipt {
     var discountSplitMode: ExtraSplitMode {
         get { ExtraSplitMode(rawValue: discountSplitModeRaw) ?? .proportional }
         set { discountSplitModeRaw = newValue.rawValue }
+    }
+
+    static var defaultCurrencyCode: String {
+        Locale.current.currency?.identifier ?? "USD"
+    }
+
+    var effectiveCurrencyCode: String {
+        guard let currencyCode, !currencyCode.isEmpty else {
+            return Self.defaultCurrencyCode
+        }
+        return currencyCode
     }
 
     var itemSubtotal: Decimal { items.reduce(0) { $0 + $1.lineTotal } }
@@ -133,5 +144,35 @@ final class Participant {
 
     var initials: String {
         name.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined().uppercased()
+    }
+}
+
+enum ReceiptStorage {
+    static func insert(_ receipt: Receipt, in modelContext: ModelContext) {
+        modelContext.insert(receipt)
+        save(modelContext)
+    }
+
+    static func archive(_ receipt: Receipt, in modelContext: ModelContext) {
+        receipt.archive()
+        save(modelContext)
+    }
+
+    static func restore(_ receipt: Receipt, in modelContext: ModelContext) {
+        receipt.restore()
+        save(modelContext)
+    }
+
+    static func delete(_ receipt: Receipt, in modelContext: ModelContext) {
+        modelContext.delete(receipt)
+        save(modelContext)
+    }
+
+    private static func save(_ modelContext: ModelContext) {
+        do {
+            try modelContext.save()
+        } catch {
+            assertionFailure("Failed to save SwiftData changes: \(error)")
+        }
     }
 }

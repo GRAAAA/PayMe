@@ -40,22 +40,24 @@ enum SplitCalculator {
             ]
         }
 
-        let itemTotals: [UUID: Decimal] = Dictionary(uniqueKeysWithValues: people.map { person in
-            let total = receipt.items.reduce(Decimal.zero) { result, item in
-                let assigned = item.assignedParticipants(from: people)
-                guard assigned.contains(where: { $0.id == person.id }), !assigned.isEmpty else { return result }
-                return result + item.lineTotal / Decimal(assigned.count)
+        var sharesByParticipant: [UUID: [ItemShare]] = [:]
+        for item in receipt.items {
+            let assigned = item.assignedParticipants(from: people)
+            guard !assigned.isEmpty else { continue }
+
+            let share = ItemShare(
+                item: item,
+                peopleCount: assigned.count,
+                amount: item.lineTotal / Decimal(assigned.count)
+            )
+            for participant in assigned {
+                sharesByParticipant[participant.id, default: []].append(share)
             }
-            return (person.id, total)
-        })
+        }
 
         return people.map { person in
-            let shares = receipt.items.compactMap { item -> ItemShare? in
-                let assigned = item.assignedParticipants(from: people)
-                guard assigned.contains(where: { $0.id == person.id }), !assigned.isEmpty else { return nil }
-                return ItemShare(item: item, peopleCount: assigned.count, amount: item.lineTotal / Decimal(assigned.count))
-            }
-            let itemTotal = itemTotals[person.id, default: 0]
+            let shares = sharesByParticipant[person.id, default: []]
+            let itemTotal = shares.reduce(Decimal.zero) { $0 + $1.amount }
             let discountShare = extraShare(
                 receipt.discount,
                 itemTotal: itemTotal,
@@ -85,7 +87,7 @@ enum SplitCalculator {
 
     static func summary(for receipt: Receipt) -> String {
         let date = receipt.date.formatted(date: .abbreviated, time: .omitted)
-        let currencyCode = receipt.currencyCode ?? Locale.current.currency?.identifier ?? "USD"
+        let currencyCode = receipt.effectiveCurrencyCode
         if receipt.billMode == .onMe {
             return "Receipt for \(receipt.storeName) on \(date):\nOn me: \(receipt.grandTotal.currency(code: currencyCode))"
         }
